@@ -7,9 +7,12 @@
 #-----------------------------------------------------------------------------
 from pystan.stanc cimport PyStancResult, stanc as c_stanc
 
-def stanc(bytes model_stancode, bytes model_name):
+def stanc(bytes model_stancode, bytes model_name, bool allow_undefined,
+          bytes filename, list include_paths):
     cdef PyStancResult result
-    c_stanc(model_stancode, model_name, result)
+    c_stanc(model_stancode, model_name,
+            allow_undefined, filename,
+            include_paths, result)
     return {'status': result.status,
             'msg': result.msg.decode('ascii'),
             'model_cppname': result.model_cppname.decode('ascii'),

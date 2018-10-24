@@ -24,6 +24,7 @@ import sys
 import tempfile
 import time
 import warnings
+import subprocess
 
 import distutils
 from distutils.core import Extension
@@ -202,7 +203,8 @@ class StanModel:
     def __init__(self, file=None, charset='utf-8', model_name="anon_model",
                  model_code=None, stanc_ret=None, boost_lib=None,
                  eigen_lib=None, verbose=False, obfuscate_model_name=True,
-                 extra_compile_args=None):
+                 extra_compile_args=None, allow_undefined=False, 
+                 include_dirs=None, includes=None, library_dirs=None, libraries=None):
 
         if stanc_ret is None:
             stanc_ret = pystan.api.stanc(file=file,
@@ -210,7 +212,8 @@ class StanModel:
                                          model_code=model_code,
                                          model_name=model_name,
                                          verbose=verbose,
-                                         obfuscate_model_name=obfuscate_model_name)
+                                         obfuscate_model_name=obfuscate_model_name,
+                                         allow_undefined=allow_undefined)
 
         if not isinstance(stanc_ret, dict):
             raise ValueError("stanc_ret must be an object returned by stanc.")
@@ -245,7 +248,9 @@ class StanModel:
         self.module_name = 'stanfit4{}_{}'.format(self.model_name, nonce)
         lib_dir = tempfile.mkdtemp()
         pystan_dir = os.path.dirname(__file__)
-        include_dirs = [
+        if include_dirs is None:
+            include_dirs = []
+        include_dirs += [
             lib_dir,
             pystan_dir,
             os.path.join(pystan_dir, "stan", "src"),
@@ -255,8 +260,22 @@ class StanModel:
             os.path.join(pystan_dir, "stan", "lib", "stan_math", "lib", "cvodes_2.9.0", "include"),
             np.get_include(),
         ]
+        try:
+            root_path = os.environ['ROOTSYS']
+            include_dirs += [os.path.join(root_path, "include")]
+        except KeyError:
+            warnings.warn('ROOT environment has not been set properly!')
+
 
         model_cpp_file = os.path.join(lib_dir, self.model_cppname + '.hpp')
+        if includes is not None:
+            code = ""
+            for fn in includes:
+                code += "#include \"{0}\"\n".format(fn)
+            ind = self.model_cppcode.index("static int current_statement_begin__;")
+            self.model_cppcode = "\n".join([
+                self.model_cppcode[:ind], code, self.model_cppcode[ind:]
+            ])
         with io.open(model_cpp_file, 'w', encoding='utf-8') as outfile:
             outfile.write(self.model_cppcode)
 
@@ -268,6 +287,25 @@ class StanModel:
         with io.open(pyx_file, 'w', encoding='utf-8') as outfile:
             s = template.safe_substitute(model_cppname=self.model_cppname)
             outfile.write(s)
+
+        if library_dirs is None:
+            library_dirs = []
+        try:
+            root_path = os.environ['ROOTSYS']
+            library_dirs += [os.path.join(root_path, "lib")]
+        except KeyError:
+            warnings.warn('ROOT environment has not been set properly!')
+
+        if libraries is None:
+            libraries = []
+        try:
+            rootlib_config = subprocess.run(['root-config', '--libs'], stdout=subprocess.PIPE).stdout.decode('utf-8')
+            for lib_args in rootlib_config.split():
+                if 'lib' in lib_args:
+                    continue
+                libraries += [lib_args[2:]]
+        except Exception:
+            warnings.warn('Unable to call root-config. The ROOT environment may have not been set properly.')
 
         stan_macros = [
             ('BOOST_RESULT_OF_USE_TR1', None),
@@ -288,12 +326,23 @@ class StanModel:
             if platform.platform().startswith('Win') and build_extension.compiler in (None, 'msvc'):
                 extra_compile_args = ['/EHsc', '-DBOOST_DATE_TIME_NO_LIB']
 
+        try:
+            rootcflags_config = subprocess.run(['root-config', '--cflags'], stdout=subprocess.PIPE).stdout.decode('utf-8')
+            for cflags_args in rootcflags_config.split():
+                if 'include' in cflags_args:
+                    continue
+                extra_compile_args += [cflags_args]
+        except Exception:
+            warnings.warn('Unable to call root-config. The ROOT environment may have not been set properly.')
+
         distutils.log.set_verbosity(verbose)
         extension = Extension(name=self.module_name,
                               language="c++",
                               sources=[pyx_file],
                               define_macros=stan_macros,
                               include_dirs=include_dirs,
+                              library_dirs=library_dirs,
+                              libraries=libraries,
                               extra_compile_args=extra_compile_args)
 
         cython_include_dirs = ['.', pystan_dir]

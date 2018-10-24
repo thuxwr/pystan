@@ -18,7 +18,7 @@ logger = logging.getLogger('pystan')
 
 
 def stanc(file=None, charset='utf-8', model_code=None, model_name="anon_model",
-          verbose=False, obfuscate_model_name=True):
+          verbose=False, obfuscate_model_name=True, allow_undefined=False):
     """Translate Stan model specification into C++ code.
 
     Parameters
@@ -124,7 +124,7 @@ def stanc(file=None, charset='utf-8', model_code=None, model_name="anon_model",
 
     model_name_bytes = model_name.encode('ascii')
 
-    result = pystan._api.stanc(model_code_bytes, model_name_bytes)
+    result = pystan._api.stanc(model_code_bytes, model_name_bytes, allow_undefined)
     if result['status'] == -1:  # EXCEPTION_RC is -1
         msg = result['msg']
         if PY2:
@@ -144,7 +144,7 @@ def stan(file=None, model_name="anon_model", model_code=None, fit=None,
          data=None, pars=None, chains=4, iter=2000, warmup=None, thin=1,
          init="random", seed=None, algorithm=None, control=None, sample_file=None,
          diagnostic_file=None, verbose=False, boost_lib=None,
-         eigen_lib=None, n_jobs=-1, **kwargs):
+         eigen_lib=None, n_jobs=-1, allow_undefined=False, **kwargs):
     """Fit a model using Stan.
 
     The `pystan.stan` function was deprecated in version 2.17 and will be
@@ -387,7 +387,7 @@ def stan(file=None, model_name="anon_model", model_code=None, fit=None,
     else:
         m = StanModel(file=file, model_name=model_name, model_code=model_code,
                       boost_lib=boost_lib, eigen_lib=eigen_lib,
-                      obfuscate_model_name=obfuscate_model_name, verbose=verbose)
+                      obfuscate_model_name=obfuscate_model_name, verbose=verbose, allow_undefined=allow_undefined)
     # check that arguments in kwargs are valid
     valid_args = {"chain_id", "init_r", "test_grad", "append_samples", "enable_random_init",
                   "refresh", "control"}

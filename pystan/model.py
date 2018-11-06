@@ -301,7 +301,7 @@ class StanModel:
         try:
             rootlib_config = subprocess.run(['root-config', '--libs'], stdout=subprocess.PIPE).stdout.decode('utf-8')
             for lib_args in rootlib_config.split():
-                if 'lib' in lib_args:
+                if 'lib' in lib_args or lib_args[1]!='l':
                     continue
                 libraries += [lib_args[2:]]
         except Exception:
